@@ -1,0 +1,63 @@
+<?php
+
+/**
+ * @file
+ * Provide install/uninstall hooks.
+ */
+
+
+/**
+ * Implements hook_schema().
+ */
+function freelance_grabber_schema() {
+  $schema['freelance_grabber_hash'] = array(
+    'description' => 'Store items hashes',
+    'fields' => array(
+      'tiser_id' => array(
+        'description' => 'tiser_id - primary key',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'created' => array(
+        'description' => '',
+        'type' => 'int',
+        'size' => 'normal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'hash' => array(
+        'description' => 'MD5 hash',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('tiser_id'),
+    'indexes' => array(
+      'hash' => array('hash'),
+      'created' => array('created'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_enable().
+ */
+function freelance_grabber_enable() {
+  $mail_modes = variable_get('mail_system', array('default-system' => 'DefaultMailSystem'));
+  $mail_modes['default-system'] = 'HtmlMailSystem';
+  variable_set('mail_system', $mail_modes);
+}
+
+/**
+ * Implements hook_disable().
+ */
+function freelance_grabber_disable() {
+  $mail_modes = variable_get('mail_system');
+  $mail_modes['default-system'] = 'DefaultMailSystem';
+  variable_set('mail_system', $mail_modes);
+}

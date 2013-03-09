@@ -1,0 +1,166 @@
+<?php
+/**
+ * @file
+ * @todo add hash table cleaning
+ */
+
+/**
+ * Implements hook_menu()
+ */
+function freelance_grabber_menu() {
+  $items = array();
+
+  $items['grabber/freelansimru'] = array(
+    'title' => 'freelance grabber',
+    'page callback' => 'freelance_grabber_freelansimru_grab',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['grabber'] = array(
+    'title' => 'grabber',
+    'page callback' => 'freelance_grabber_list_grabbers',
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Menu callback. Display list of avaliable grabbers.
+ */
+function freelance_grabber_list_grabbers() {
+  $items = freelance_grabber_menu();
+  unset($items['grabber']);
+  $links = array();
+  foreach ($items as $key => $item) {
+    $links[] = array(
+      'href' => $key,
+      'title' => $item['title']
+    );
+  }
+  return array(
+    '#theme' => 'links',
+    '#links' => $links
+  );
+}
+
+/**
+ * Main freelansim.ru grabber function
+ * Get all items from specific reqest (e.g. q=drupal)
+ */
+function _freelance_grabber_freelansimru_grab($page_num = 1) {
+  $url = 'http://freelansim.ru/tasks?page=' . $page_num . '&q=drupal';
+  $site_url = 'http://freelansim.ru';
+  $html = file_get_html($url);
+  $body_array = &drupal_static(__FUNCTION__, array());
+  $i = &drupal_static(__FUNCTION__ . ':iterator', 0);
+  $elements = (array) $html->find("div#tasks_list div.tasks div.task");
+  if (count($elements)) {
+    foreach ($elements as $element) {
+      $description = $element->find('div.description', 0)->plaintext;
+      $link_url = $element->find('div.title a', 0)->href;
+      $link_title = $element->find('div.title', 0)->title;
+      if (!$link_title) {
+        $link_title = $element->find('div.title a', 0)->plaintext;
+      }
+      $published = $element->find('div.published', 0)->plaintext;
+      $link = l($link_title, $site_url . $link_url);
+      $item = array();
+
+      $item['link'] = $link;
+      $item['teaser'] = $description;
+
+      // Check if current item already has been processed.
+      if (!freelance_grabber_freelansimru_grab_tiser_process($item)) {
+        continue;
+      }
+
+      // published date can change, so include it later then pass data to
+      // freelance_grabber_freelansimru_grab_tiser_process()
+      $item['published'] = $published;
+      $body_array[$i] = $item;
+      $i++;
+    }
+    // Check other pages
+    $body_array += _freelance_grabber_freelansimru_grab($page_num + 1);
+  }
+  return $body_array;
+}
+
+/**
+ * Chech if teaser already has been processed.
+ * If no,insert hash in to table hash
+ * @param array $item
+ * - $item['link']
+ * - $item['teaser']
+ * @return bool FALSE if teser already processed
+ */
+function freelance_grabber_freelansimru_grab_tiser_process($item) {
+  $string = implode($item);
+  $md5 = md5($string);
+  $hash = db_select('freelance_grabber_hash', 'fgh')->fields('fgh', array('hash'))->condition('fgh.hash', $md5)->execute()->fetchField();
+  if (!$hash) {
+    $record = array(
+      'created' => REQUEST_TIME,
+      'hash' => $md5
+    );
+    drupal_write_record('freelance_grabber_hash', $record);
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Run grabbing and send email
+ */
+function freelance_grabber_freelansimru_grab () {
+  global $language;
+  $body_array = _freelance_grabber_freelansimru_grab();
+  if ($body_array) {
+    $to = 'dimasikov@gmail.com';
+    drupal_mail('freelance_grabber', 'freelansimru', $to, $language, array('body_array' => $body_array));
+    print 'success';
+    exit;
+  }
+  print 'No new projects';
+  exit;
+}
+
+/**
+ * Implements hook_mail()
+ */
+function freelance_grabber_mail($key, &$message, $params) {
+
+  $headers = array(
+    'X-Mailer' => variable_get('site_name', 'Drupal'),
+    'Content-Type' => 'text/html; charset=UTF-8;'
+  );
+
+  switch ($key) {
+    case 'freelansimru':
+      $body_array = $params['body_array'];
+      $message['subject'] = t('New projects on freelansim.ru, from !datetime', array(
+        '!datetime' => format_date(REQUEST_TIME, 'custom', 'Y, F d H:i')
+      ));
+      foreach ($body_array as $body_array_item) {
+        $link = $body_array_item['link'];
+        $teaser = $body_array_item['teaser'];
+        $published = $body_array_item['published'];
+        $body = implode("\n<br>", array($link, $published, $teaser));
+        $message['body'][] = "\n\n<br>" . $body . "\n\n<br>";
+      }
+      $message['headers'] = array_merge($message['headers'], $headers);
+      break;
+  }
+}
+
+/**
+ * Implements hook_cron().
+ */
+function freelance_grabber_cron() {
+  // clean hash table
+  $delete_from_timstamp = REQUEST_TIME - 60 * 60 * 24 * 14; // 14 days
+  $num = db_delete('freelance_grabber_hash')->condition('freelance_grabber_hash.created', $delete_from_timstamp, '<')->execute();
+  watchdog('freelance_grabber', '!num items was deleted from last cron runing', array('!num' => $num));
+}

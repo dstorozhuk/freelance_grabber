@@ -1,0 +1,8 @@
+name = Freelance grabber
+description = Grab freelance sites.
+core = 7.x
+package = Other
+dependencies[] = simplehtmldom
+
+files[] = html_mail.class
+
