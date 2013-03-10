@@ -23,6 +23,12 @@ function freelance_grabber_menu() {
     'access arguments' => array('access content'),
     'type' => MENU_NORMAL_ITEM,
   );
+  $items['grabber/clear-hashes'] = array(
+    'title' => 'grabber',
+    'page callback' => 'freelance_grabber_grabbers_clear_hashes',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
   return $items;
 }
 
@@ -51,6 +57,7 @@ function freelance_grabber_list_grabbers() {
  */
 function _freelance_grabber_freelansimru_grab($page_num = 1) {
   $url = 'http://freelansim.ru/tasks?page=' . $page_num . '&q=drupal';
+//  $url = 'http://freelansim.ru/tasks?page=' . $page_num . '&q=ios';
   $site_url = 'http://freelansim.ru';
   $html = file_get_html($url);
   $body_array = &drupal_static(__FUNCTION__, array());
@@ -119,7 +126,20 @@ function freelance_grabber_freelansimru_grab () {
   $body_array = _freelance_grabber_freelansimru_grab();
   if ($body_array) {
     $to = 'dimasikov@gmail.com';
-    drupal_mail('freelance_grabber', 'freelansimru', $to, $language, array('body_array' => $body_array));
+    $message = drupal_mail('freelance_grabber', 'freelansimru', $to, $language, array('body_array' => $body_array));
+    if (!$message['result']) {
+      $md5_list = array();
+      foreach ($body_array as $body_array_item) {
+        unset($body_array_item['published']);
+        $string = implode($body_array_item);
+        $md5_list[] = md5($string);
+      }
+      $num = db_delete('freelance_grabber_hash')
+          ->condition('hash', $md5_list)
+          ->execute();
+      print 'Enable to send messages';
+      exit;
+    }
     print 'success';
     exit;
   }
@@ -163,4 +183,12 @@ function freelance_grabber_cron() {
   $delete_from_timstamp = REQUEST_TIME - 60 * 60 * 24 * 14; // 14 days
   $num = db_delete('freelance_grabber_hash')->condition('freelance_grabber_hash.created', $delete_from_timstamp, '<')->execute();
   watchdog('freelance_grabber', '!num items was deleted from last cron runing', array('!num' => $num));
+}
+
+/**
+ * Clear hash table
+ */
+function freelance_grabber_grabbers_clear_hashes() {
+  $num = db_delete('freelance_grabber_hash')->execute();
+  exit($num . ' was deleted.');
 }
