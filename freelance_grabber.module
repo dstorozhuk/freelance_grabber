@@ -153,10 +153,12 @@ function freelance_grabber_freelansimru_grab_tiser_process($item) {
 /**
  * Run grabbing and send emails
  */
-function freelance_grabber_freelansimru_grab ($type) {
+function freelance_grabber_freelansimru_grab($type) {
   global $language;
   @ignore_user_abort(TRUE);
   drupal_set_time_limit(360);
+  // settings.
+  $to = 'dimasikov@gmail.com';
   $queries = array(
     'drupal' => array(
       'page' => 1,
@@ -167,11 +169,12 @@ function freelance_grabber_freelansimru_grab ($type) {
       'categories' => 'web_all_inclusive,web_design,web_html,web_programming,web_prototyping,web_test,web_other'
     )
   );
+  // go!
   if (isset($queries[$type])) {
     $body_array = _freelance_grabber_freelansimru_grab($queries[$type]);
     if ($body_array) {
-      $to = 'dimasikov@gmail.com';
       $message = drupal_mail('freelance_grabber', 'freelansimru', $to, $language, array('body_array' => $body_array));
+      // if messages hasn't been sended, provide an ability to resend them later.
       if (!$message['result']) {
         $md5_list = array();
         foreach ($body_array as $body_array_item) {
